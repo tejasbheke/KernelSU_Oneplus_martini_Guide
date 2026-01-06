@@ -38,14 +38,14 @@ on:
         KERNELSU_TAG:
           description: 'Choose KernelSU branch or tag'
           required: false
-          default: "a943528d8203f2bcd524bddb273fb3c00905ea67"
+          default: "84f0f02"
           type: string
 
 jobs:
 
   build:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-22.04
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
