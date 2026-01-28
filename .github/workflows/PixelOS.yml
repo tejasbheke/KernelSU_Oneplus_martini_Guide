@@ -1,25 +1,18 @@
-name: PixelOS OnePlus 9RT KernelSU-Next
+name: PixelOS OnePlus 9RT KernelSU-Next (Kernel 5.4)
 
 on:
   workflow_dispatch:
     inputs:
       KERNEL_SOURCE:
-        description: "Kernel Source"
         required: true
         default: "https://github.com/beet-stuffs/android_kernel_oneplus_sm8350.git"
-        type: string
       KERNEL_SOURCE_BRANCH:
-        description: "Kernel Branch"
         required: true
         default: "fourteen-qpr2"
-        type: string
       KERNEL_DEFCONFIG:
-        description: "Kernel Defconfig"
         required: true
         default: "vendor/lahaina-qgki_defconfig"
-        type: string
       KERNELSU_CONFIG:
-        description: "Enable KernelSU-Next"
         required: true
         default: true
         type: boolean
@@ -36,6 +29,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # ------------------------------------------------------------
+      # Dependencies
+      # ------------------------------------------------------------
       - name: Install dependencies
         run: |
           sudo apt update
@@ -45,11 +41,25 @@ jobs:
             python3 lz4 cpio device-tree-compiler \
             llvm lld
 
+      # ------------------------------------------------------------
+      # PYTHON2 FIX (CRITICAL FOR DTBO)
+      # ------------------------------------------------------------
+      - name: Python2 compatibility shim (dtbo fix)
+        run: |
+          sudo ln -sf /usr/bin/python3 /usr/bin/python2
+          sudo ln -sf /usr/bin/python3 /usr/bin/python
+
+      # ------------------------------------------------------------
+      # Proton Clang
+      # ------------------------------------------------------------
       - name: Setup Proton Clang
         run: |
           git clone --depth=1 https://github.com/kdrag0n/proton-clang clang
           echo "$(pwd)/clang/bin" >> $GITHUB_PATH
 
+      # ------------------------------------------------------------
+      # Kernel Source
+      # ------------------------------------------------------------
       - name: Clone kernel source
         run: |
           git clone --depth=1 \
@@ -57,7 +67,10 @@ jobs:
             -b ${{ github.event.inputs.KERNEL_SOURCE_BRANCH }} \
             kernel
 
-      - name: Setup KernelSU-Next (official)
+      # ------------------------------------------------------------
+      # KernelSU-Next (OFFICIAL METHOD)
+      # ------------------------------------------------------------
+      - name: Setup KernelSU-Next
         if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd kernel
@@ -70,6 +83,9 @@ jobs:
           scripts/config --file arch/arm64/configs/${{ github.event.inputs.KERNEL_DEFCONFIG }} -e KSU
           scripts/config --file arch/arm64/configs/${{ github.event.inputs.KERNEL_DEFCONFIG }} -d KSU_DEBUG
 
+      # ------------------------------------------------------------
+      # Build Kernel (with linker fix)
+      # ------------------------------------------------------------
       - name: Build kernel
         run: |
           cd kernel
@@ -83,16 +99,19 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
 
-          # CRITICAL: force system linker
+          # CRITICAL: force system linker for host tools
           export LD=ld.lld
           export HOSTLD=ld.lld
 
-          # remove proton ld from PATH for host tools
+          # prevent proton ld from being used for host binaries
           export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v clang | paste -sd ':' -)
 
           make O=out ${{ github.event.inputs.KERNEL_DEFCONFIG }}
           make -j$(nproc) O=out
 
+      # ------------------------------------------------------------
+      # AnyKernel3 ZIP
+      # ------------------------------------------------------------
       - name: Create AnyKernel3 zip
         run: |
           cd kernel
@@ -101,6 +120,9 @@ jobs:
           cd AnyKernel3
           zip -r PixelOS-martini-KernelSU-Next.zip *
 
+      # ------------------------------------------------------------
+      # Upload
+      # ------------------------------------------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
