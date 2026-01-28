@@ -42,7 +42,8 @@ jobs:
           sudo apt install -y \
             git bc bison flex libssl-dev libelf-dev \
             build-essential ccache curl zip unzip \
-            python3 lz4 cpio device-tree-compiler
+            python3 lz4 cpio device-tree-compiler \
+            llvm lld
 
       - name: Setup Proton Clang
         run: |
@@ -56,7 +57,7 @@ jobs:
             -b ${{ github.event.inputs.KERNEL_SOURCE_BRANCH }} \
             kernel
 
-      - name: Setup KernelSU-Next (official method)
+      - name: Setup KernelSU-Next (official)
         if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd kernel
@@ -72,13 +73,22 @@ jobs:
       - name: Build kernel
         run: |
           cd kernel
+
           export ARCH=arm64
           export SUBARCH=arm64
+
           export CC="ccache clang"
           export CXX="ccache clang++"
+
           export LLVM=1
           export LLVM_IAS=1
+
+          # CRITICAL: force system linker
           export LD=ld.lld
+          export HOSTLD=ld.lld
+
+          # remove proton ld from PATH for host tools
+          export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v clang | paste -sd ':' -)
 
           make O=out ${{ github.event.inputs.KERNEL_DEFCONFIG }}
           make -j$(nproc) O=out
