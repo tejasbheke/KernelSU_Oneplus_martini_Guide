@@ -1,4 +1,4 @@
-name: PixelOS OnePlus 9RT KernelSU-Next v3
+name: PixelOS OnePlus 9RT KernelSU-Next
 
 on:
   workflow_dispatch:
@@ -56,11 +56,11 @@ jobs:
             -b ${{ github.event.inputs.KERNEL_SOURCE_BRANCH }} \
             kernel
 
-      - name: Setup KernelSU-Next v3
-         if: github.event.inputs.KERNELSU_CONFIG == 'true'
+      - name: Setup KernelSU-Next (official method)
+        if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd kernel
-           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
       - name: Enable KernelSU in defconfig
         if: github.event.inputs.KERNELSU_CONFIG == 'true'
@@ -88,12 +88,11 @@ jobs:
           cd kernel
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp out/arch/arm64/boot/Image AnyKernel3/
-
           cd AnyKernel3
-          zip -r PixelOS-martini-KernelSU-Next-v3.zip *
+          zip -r PixelOS-martini-KernelSU-Next.zip *
 
-      - name: Upload AnyKernel3 zip
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PixelOS-martini-KernelSU-Next-v3
-          path: kernel/AnyKernel3/PixelOS-martini-KernelSU-Next-v3.zip
+          name: PixelOS-martini-KernelSU-Next
+          path: kernel/AnyKernel3/PixelOS-martini-KernelSU-Next.zip
