@@ -1,21 +1,7 @@
-name: PixelOS OnePlus 9RT KernelSU-Next (Kernel 5.4)
+name: OnePlus 9RT Kernel 5.4 + KernelSU-Next
 
 on:
   workflow_dispatch:
-    inputs:
-      KERNEL_SOURCE:
-        required: true
-        default: "https://github.com/beet-stuffs/android_kernel_oneplus_sm8350.git"
-      KERNEL_SOURCE_BRANCH:
-        required: true
-        default: "fourteen-qpr2"
-      KERNEL_DEFCONFIG:
-        required: true
-        default: "vendor/lahaina-qgki_defconfig"
-      KERNELSU_CONFIG:
-        required: true
-        default: true
-        type: boolean
 
 jobs:
   build:
@@ -38,16 +24,18 @@ jobs:
           sudo apt install -y \
             git bc bison flex libssl-dev libelf-dev \
             build-essential ccache curl zip unzip \
-            python3 lz4 cpio device-tree-compiler \
-            llvm lld
+            lz4 cpio device-tree-compiler \
+            llvm lld \
+            python3
 
       # ------------------------------------------------------------
-      # PYTHON2 FIX (CRITICAL FOR DTBO)
+      # REAL PYTHON2 (REQUIRED FOR DTBO)
       # ------------------------------------------------------------
-      - name: Python2 compatibility shim (dtbo fix)
+      - name: Install Python 2.7 (DTBO requirement)
         run: |
-          sudo ln -sf /usr/bin/python3 /usr/bin/python2
-          sudo ln -sf /usr/bin/python3 /usr/bin/python
+          sudo apt update
+          sudo apt install -y python2-minimal || sudo apt install -y python2
+          sudo ln -sf /usr/bin/python2 /usr/bin/python
 
       # ------------------------------------------------------------
       # Proton Clang
@@ -63,28 +51,27 @@ jobs:
       - name: Clone kernel source
         run: |
           git clone --depth=1 \
-            ${{ github.event.inputs.KERNEL_SOURCE }} \
-            -b ${{ github.event.inputs.KERNEL_SOURCE_BRANCH }} \
-            kernel
+            https://github.com/beet-stuffs/android_kernel_oneplus_sm8350.git \
+            -b fourteen-qpr2 kernel
 
       # ------------------------------------------------------------
       # KernelSU-Next (OFFICIAL METHOD)
       # ------------------------------------------------------------
       - name: Setup KernelSU-Next
-        if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd kernel
-          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
+          curl -LSs \
+            "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" \
+            | bash -
 
       - name: Enable KernelSU in defconfig
-        if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd kernel
-          scripts/config --file arch/arm64/configs/${{ github.event.inputs.KERNEL_DEFCONFIG }} -e KSU
-          scripts/config --file arch/arm64/configs/${{ github.event.inputs.KERNEL_DEFCONFIG }} -d KSU_DEBUG
+          scripts/config --file arch/arm64/configs/vendor/lahaina-qgki_defconfig -e KSU
+          scripts/config --file arch/arm64/configs/vendor/lahaina-qgki_defconfig -d KSU_DEBUG
 
       # ------------------------------------------------------------
-      # Build Kernel (with linker fix)
+      # Build Kernel (HOST LINKER FIX INCLUDED)
       # ------------------------------------------------------------
       - name: Build kernel
         run: |
@@ -99,18 +86,18 @@ jobs:
           export LLVM=1
           export LLVM_IAS=1
 
-          # CRITICAL: force system linker for host tools
+          # CRITICAL: use system linker for host tools
           export LD=ld.lld
           export HOSTLD=ld.lld
 
-          # prevent proton ld from being used for host binaries
+          # prevent Proton ld from leaking into host builds
           export PATH=$(echo "$PATH" | tr ':' '\n' | grep -v clang | paste -sd ':' -)
 
-          make O=out ${{ github.event.inputs.KERNEL_DEFCONFIG }}
+          make O=out vendor/lahaina-qgki_defconfig
           make -j$(nproc) O=out
 
       # ------------------------------------------------------------
-      # AnyKernel3 ZIP
+      # AnyKernel3
       # ------------------------------------------------------------
       - name: Create AnyKernel3 zip
         run: |
@@ -118,13 +105,10 @@ jobs:
           git clone https://github.com/osm0sis/AnyKernel3.git AnyKernel3
           cp out/arch/arm64/boot/Image AnyKernel3/
           cd AnyKernel3
-          zip -r PixelOS-martini-KernelSU-Next.zip *
+          zip -r OnePlus9RT-KernelSU-Next.zip *
 
-      # ------------------------------------------------------------
-      # Upload
-      # ------------------------------------------------------------
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PixelOS-martini-KernelSU-Next
-          path: kernel/AnyKernel3/PixelOS-martini-KernelSU-Next.zip
+          name: OnePlus9RT-KernelSU-Next
+          path: kernel/AnyKernel3/OnePlus9RT-KernelSU-Next.zip
