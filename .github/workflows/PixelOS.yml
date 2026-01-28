@@ -57,14 +57,10 @@ jobs:
             kernel
 
       - name: Setup KernelSU-Next v3
-        if: github.event.inputs.KERNELSU_CONFIG == 'true'
+         if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd kernel
-          git clone https://github.com/KernelSU-Next/KernelSU-Next.git
-          cd KernelSU-Next
-          git checkout v3
-          cd ..
-          bash KernelSU-Next/kernel/setup.sh
+           curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -
 
       - name: Enable KernelSU in defconfig
         if: github.event.inputs.KERNELSU_CONFIG == 'true'
