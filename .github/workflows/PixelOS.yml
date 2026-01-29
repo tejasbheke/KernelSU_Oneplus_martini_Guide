@@ -29,7 +29,7 @@ on:
         default: true
         type: boolean
       KERNELSU_TAG:
-        description: 'KernelSU tag/commit'
+        description: 'KernelSU tag / commit'
         required: false
         default: "a943528d8203f2bcd524bddb273fb3c00905ea67"
         type: string
@@ -50,12 +50,13 @@ jobs:
             build-essential \
             python3 python-is-python3
 
-      - name: Setup AOSP Clang
+      - name: Setup AOSP Clang (Android 16)
         run: |
           mkdir -p $GITHUB_WORKSPACE/toolchain
           cd $GITHUB_WORKSPACE/toolchain
-          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/master/clang-r416183b.tar.gz
-          tar -xf clang-r416183b.tar.gz
+
+          wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/tags/android-16.0.0_r4/clang-r547379.tar.gz
+          tar -xf clang-r547379.tar.gz
 
           echo "PATH=$GITHUB_WORKSPACE/toolchain/bin:$PATH" >> $GITHUB_ENV
 
@@ -77,14 +78,20 @@ jobs:
           scripts/config --file arch/arm64/configs/${{ github.event.inputs.KERNEL_DEFCONFIG }} \
             -e MODULES -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS
 
-      - name: Build kernel
+      - name: Build kernel (LLVM, Android 16)
         run: |
           cd kernel
+
           export ARCH=arm64
           export LLVM=1
           export LLVM_IAS=1
 
           make O=out ${{ github.event.inputs.KERNEL_DEFCONFIG }}
+
+          # Disable LTO for GitHub runners (LLVM 18+ can OOM)
+          scripts/config --file out/.config \
+            -d LTO -d LTO_CLANG -d THINLTO -e LTO_NONE
+
           make O=out -j$(nproc)
 
       - name: Create AnyKernel3 zip
