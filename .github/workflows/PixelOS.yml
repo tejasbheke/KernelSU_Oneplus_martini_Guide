@@ -68,7 +68,7 @@ jobs:
           git clone --depth=1 https://github.com/kdrag0n/proton-clang $CLANG_PATH
           sh -c "$(curl -sSL https://raw.githubusercontent.com/akhilnarang/scripts/master/setup/android_build_env.sh)"
           sudo apt install --fix-missing
-          export LLVM_VERSION=13
+          export LLVM_VERSION=17
           wget https://apt.llvm.org/llvm.sh
           chmod +x llvm.sh
           sudo ./llvm.sh $LLVM_VERSION
