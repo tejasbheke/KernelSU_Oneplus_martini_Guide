@@ -1,8 +1,6 @@
-name: Pixel OS SUSFS
-
+name: LineageOS 23.2 KernelSU-Next
 
 on:
-
     workflow_dispatch:
       inputs:
         RELEASE_CONFIG:
@@ -13,12 +11,12 @@ on:
         KERNEL_SOURCE:
           description: 'Kernel Source'
           required: true
-          default: "https://github.com/natsumerinchan/android_kernel_oneplus_sm8350.git"
+          default: "https://github.com/LineageOS/android_kernel_oneplus_sm8350.git"
           type: string
         KERNEL_SOURCE_BRANCH:
           description: 'kernel Branch'
           required: true
-          default: "fourteen-qpr3"
+          default: "lineage-23.2"
           type: string
         KERNEL_DEFCONFIG:
           description: 'Kernel Config'
@@ -29,22 +27,20 @@ on:
           description: 'Compile KernelSU'
           required: true
           default: true
-          type: boolean          
+          type: boolean
         CCACHE_CONFIG:
           description: 'Use Ccache'
           required: true
           default: true
           type: boolean
         KERNELSU_TAG:
-          description: 'Choose KernelSU branch or tag'
+          description: 'KernelSU-Next install mode (legacy/dev/stable/tag)'
           required: false
-          default: "main"
+          default: "legacy"
           type: string
 
 jobs:
-
   build:
-
     runs-on: ubuntu-latest
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
@@ -53,14 +49,13 @@ jobs:
       CCACHE_HARDLINK: "true"
 
     steps:
-
       - uses: actions/checkout@v4
 
       - name: Ccache
         if: github.event.inputs.CCACHE_CONFIG == 'true'
         uses: hendrikmuhs/ccache-action@v1.2
         with:
-          key: PixelOS-inline
+          key: LineageOS23-martini-inline
 
       - name: Setup Environment
         run: |
@@ -89,46 +84,40 @@ jobs:
           git clone "${{ github.event.inputs.KERNEL_SOURCE }}" -b "${{ github.event.inputs.KERNEL_SOURCE_BRANCH }}" kernel --depth=1
           echo "TAG_NAME=v5.4.$(grep "^SUBLEVEL =" kernel/Makefile | awk '{print $3}')-$(date +"%Y%m%d")" >> $GITHUB_ENV
 
-      - name: Setup KernelSU
+      - name: Setup KernelSU-Next
         if: github.event.inputs.KERNELSU_CONFIG == 'true'
         run: |
           cd $GITHUB_WORKSPACE/kernel
-          git clone https://github.com/natsumerinchan/KernelSU.git KernelSU
-          curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s "${{ github.event.inputs.KERNELSU_TAG }}"
+          curl -LSs "https://raw.githubusercontent.com/KernelSU-Next/KernelSU-Next/next/kernel/setup.sh" | bash -s "${{ github.event.inputs.KERNELSU_TAG }}"
           scripts/config --file "arch/arm64/configs/${{ github.event.inputs.KERNEL_DEFCONFIG }}" -e MODULES -e KPROBES -e HAVE_KPROBES -e KPROBE_EVENTS
 
       - name: Make kernel
         run: |
           cd $GITHUB_WORKSPACE/kernel
           export KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}
-          echo "===================Setup Export========================="
           export KERNEL_PATH=$PWD
           export CLANG_PATH=~/clang
           export PATH=${CLANG_PATH}/bin:${PATH}
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export ARCH=arm64
           export SUBARCH=arm64
-          echo "===================Setup Environment Again==================="
           if [ ! -e "$CLANG_PATH/README.md" ]; then
             git clone --depth=1 https://github.com/kdrag0n/proton-clang $CLANG_PATH
           fi
           sudo apt install --fix-missing
-          echo "=========================Make=========================="
           make O=out CC="ccache clang" CXX="ccache clang++" ARCH=arm64 CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld $KERNEL_DEFCONFIG
-          # Disable LTO
           if [[ $(echo "$(awk '/MemTotal/ {print $2}' /proc/meminfo) < 16000000" | bc -l) -eq 1 ]]; then
               scripts/config --file out/.config -d LTO -d LTO_CLANG -d THINLTO -e LTO_NONE
           fi
           make O=out CC="ccache clang" CXX="ccache clang++" ARCH=arm64 -j`nproc` CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld 2>&1 | tee kernel.log
 
-      
       - name: Create Anykernel3 file
         run: |
           cd $GITHUB_WORKSPACE/kernel
           export KERNEL_PATH=$PWD
           git clone https://gitlab.com/inferno0230/AnyKernel3.git --depth=1 $KERNEL_PATH/AnyKernel3
           if test -e $KERNEL_PATH/out/arch/arm64/boot/Image && test -d $KERNEL_PATH/AnyKernel3; then
-             zip_name="PixelOS-SUSFS-martini-${{ env.TAG_NAME }}.zip"
+             zip_name="LineageOS23-KSUNext-martini-${{ env.TAG_NAME }}.zip"
              cd $KERNEL_PATH/AnyKernel3
              cp $KERNEL_PATH/out/arch/arm64/boot/Image $KERNEL_PATH/AnyKernel3
              zip -r ${zip_name} *
@@ -138,7 +127,7 @@ jobs:
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: PixelOS-SUSFS-martini-${{ env.TAG_NAME }}
+          name: LineageOS23-KSUNext-martini-${{ env.TAG_NAME }}
           path: |
             kernel/AnyKernel3/*
 
@@ -146,9 +135,9 @@ jobs:
         if: github.event.inputs.RELEASE_CONFIG == 'true'
         uses: ncipollo/release-action@v1
         with:
-          artifacts: "kernel/out/arch/arm64/boot/PixelOS-SUSFS-martini-${{ env.TAG_NAME }}.zip"
-          tag: "ONEPLUS9RT-PixelOS-SUSFS-${{ env.TAG_NAME }}"
-          name: "PixelOS SUSFS martini ${{ env.TAG_NAME }}"
+          artifacts: "kernel/out/arch/arm64/boot/LineageOS23-KSUNext-martini-${{ env.TAG_NAME }}.zip"
+          tag: "ONEPLUS9RT-LineageOS23-KSUNext-${{ env.TAG_NAME }}"
+          name: "LineageOS 23.2 KernelSU-Next martini ${{ env.TAG_NAME }}"
           allowUpdates: true
           replacesArtifacts: true
           token: ${{ secrets.GITHUB_TOKEN }}
