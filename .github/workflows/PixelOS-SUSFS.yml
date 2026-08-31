@@ -82,7 +82,7 @@ jobs:
           export KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}
           export KERNEL_PATH=$PWD
           export CLANG_PATH=~/clang
-          export PATH=${CLANG_PATH}/bin:${PATH}
+          export PATH=${PATH}:${CLANG_PATH}/bin
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export ARCH=arm64
           export SUBARCH=arm64
@@ -90,11 +90,11 @@ jobs:
             git clone --depth=1 https://github.com/kdrag0n/proton-clang $CLANG_PATH
           fi
           sudo apt install --fix-missing
-          make O=out CC="ccache clang" CXX="ccache clang++" HOSTCC=gcc HOSTCXX=g++ HOSTLD=/usr/bin/ld HOSTAR=/usr/bin/ar ARCH=arm64 CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld $KERNEL_DEFCONFIG
+          make O=out CC="ccache clang" CXX="ccache clang++" ARCH=arm64 CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld $KERNEL_DEFCONFIG
           if [[ $(echo "$(awk '/MemTotal/ {print $2}' /proc/meminfo) < 16000000" | bc -l) -eq 1 ]]; then
               scripts/config --file out/.config -d LTO -d LTO_CLANG -d THINLTO -e LTO_NONE
           fi
-          make O=out CC="ccache clang" CXX="ccache clang++" HOSTCC=gcc HOSTCXX=g++ HOSTLD=/usr/bin/ld HOSTAR=/usr/bin/ar ARCH=arm64 -j`nproc` CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld 2>&1 | tee kernel.log
+          make O=out CC="ccache clang" CXX="ccache clang++" ARCH=arm64 -j`nproc` CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld 2>&1 | tee kernel.log
 
       - name: Create Anykernel3 file
         run: |
