@@ -92,32 +92,37 @@ jobs:
             git clone --depth=1 https://github.com/kdrag0n/proton-clang $CLANG_PATH
           fi
 
-          # FIX: proton-clang MUST come first, otherwise the system clang-18
-          # compiles the objects and proton's llvm-nm/llvm-ar (v13) can't read them.
-          export PATH=${CLANG_PATH}/bin:${PATH}
+          # FIX: do NOT put proton first on PATH (its old GNU ld breaks the host
+          # tools against Ubuntu 24.04 libc). Keep PATH as-is and give the kernel
+          # build the proton LLVM tools by ABSOLUTE path instead.
+          export PATH=${PATH}:${CLANG_PATH}/bin
           export CLANG_TRIPLE=aarch64-linux-gnu-
           export ARCH=arm64
           export SUBARCH=arm64
+          B=$CLANG_PATH/bin
 
           echo "== Toolchain check =="
-          which clang llvm-nm llvm-ar ld.lld
-          clang --version | head -n 1
-          llvm-nm --version | head -n 2
+          $B/clang --version | head -n 1
+          $B/llvm-nm --version | head -n 2
+          gcc --version | head -n 1
 
-          # Use one toolchain for everything
+          # Target = proton LLVM 13 (all absolute), Host = system gcc/ld
           MAKE_ARGS=(
             O=out
             ARCH=arm64
-            CC="ccache clang"
-            CXX="ccache clang++"
-            LD=ld.lld
-            AR=llvm-ar
-            NM=llvm-nm
-            OBJCOPY=llvm-objcopy
-            OBJDUMP=llvm-objdump
-            STRIP=llvm-strip
-            CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu-
-            CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi-
+            CC="ccache $B/clang"
+            CXX="ccache $B/clang++"
+            LD=$B/ld.lld
+            AR=$B/llvm-ar
+            NM=$B/llvm-nm
+            OBJCOPY=$B/llvm-objcopy
+            OBJDUMP=$B/llvm-objdump
+            STRIP=$B/llvm-strip
+            HOSTCC=gcc
+            HOSTCXX=g++
+            HOSTLD=/usr/bin/ld
+            CROSS_COMPILE=$B/aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=$B/arm-linux-gnueabi-
           )
 
           make "${MAKE_ARGS[@]}" $KERNEL_DEFCONFIG
