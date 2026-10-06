@@ -1,47 +1,51 @@
 name: LineageOS 23.2 KernelSU-Next
 
 on:
-    workflow_dispatch:
-      inputs:
-        RELEASE_CONFIG:
-          description: 'Upload to Releases'
-          required: true
-          default: true
-          type: boolean
-        KERNEL_SOURCE:
-          description: 'Kernel Source'
-          required: true
-          default: "https://github.com/LineageOS/android_kernel_oneplus_sm8350.git"
-          type: string
-        KERNEL_SOURCE_BRANCH:
-          description: 'kernel Branch'
-          required: true
-          default: "lineage-23.2"
-          type: string
-        KERNEL_DEFCONFIG:
-          description: 'Kernel Config'
-          required: true
-          default: "vendor/lahaina-qgki_defconfig"
-          type: string
-        KERNELSU_CONFIG:
-          description: 'Compile KernelSU'
-          required: true
-          default: true
-          type: boolean
-        CCACHE_CONFIG:
-          description: 'Use Ccache'
-          required: true
-          default: true
-          type: boolean
-        KERNELSU_TAG:
-          description: 'KernelSU-Next install mode (legacy/dev/stable/tag)'
-          required: false
-          default: "legacy"
-          type: string
+  workflow_dispatch:
+    inputs:
+      RELEASE_CONFIG:
+        description: 'Upload to Releases'
+        required: true
+        default: true
+        type: boolean
+      KERNEL_SOURCE:
+        description: 'Kernel Source'
+        required: true
+        default: "https://github.com/LineageOS/android_kernel_oneplus_sm8350.git"
+        type: string
+      KERNEL_SOURCE_BRANCH:
+        description: 'kernel Branch'
+        required: true
+        default: "lineage-23.2"
+        type: string
+      KERNEL_DEFCONFIG:
+        description: 'Kernel Config'
+        required: true
+        default: "vendor/lahaina-qgki_defconfig"
+        type: string
+      KERNELSU_CONFIG:
+        description: 'Compile KernelSU'
+        required: true
+        default: true
+        type: boolean
+      CCACHE_CONFIG:
+        description: 'Use Ccache'
+        required: true
+        default: true
+        type: boolean
+      KERNELSU_TAG:
+        description: 'KernelSU-Next install mode (legacy/dev/stable/tag)'
+        required: false
+        default: "legacy"
+        type: string
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # bash with -eo pipefail: a failing `make | tee` now fails the step
+    defaults:
+      run:
+        shell: bash
     env:
       CCACHE_COMPILERCHECK: "%compiler% -dumpmachine; %compiler% -dumpversion"
       CCACHE_NOHASHDIR: "true"
@@ -78,36 +82,83 @@ jobs:
 
       - name: Make kernel
         run: |
+          set -eo pipefail
           cd $GITHUB_WORKSPACE/kernel
           export KERNEL_DEFCONFIG=${{ github.event.inputs.KERNEL_DEFCONFIG }}
           export KERNEL_PATH=$PWD
           export CLANG_PATH=~/clang
-          export PATH=${PATH}:${CLANG_PATH}/bin
-          export CLANG_TRIPLE=aarch64-linux-gnu-
-          export ARCH=arm64
-          export SUBARCH=arm64
+
           if [ ! -e "$CLANG_PATH/README.md" ]; then
             git clone --depth=1 https://github.com/kdrag0n/proton-clang $CLANG_PATH
           fi
-          sudo apt install --fix-missing
-          make O=out CC="ccache clang" CXX="ccache clang++" ARCH=arm64 CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld $KERNEL_DEFCONFIG
+
+          # FIX: proton-clang MUST come first, otherwise the system clang-18
+          # compiles the objects and proton's llvm-nm/llvm-ar (v13) can't read them.
+          export PATH=${CLANG_PATH}/bin:${PATH}
+          export CLANG_TRIPLE=aarch64-linux-gnu-
+          export ARCH=arm64
+          export SUBARCH=arm64
+
+          echo "== Toolchain check =="
+          which clang llvm-nm llvm-ar ld.lld
+          clang --version | head -n 1
+          llvm-nm --version | head -n 2
+
+          # Use one toolchain for everything
+          MAKE_ARGS=(
+            O=out
+            ARCH=arm64
+            CC="ccache clang"
+            CXX="ccache clang++"
+            LD=ld.lld
+            AR=llvm-ar
+            NM=llvm-nm
+            OBJCOPY=llvm-objcopy
+            OBJDUMP=llvm-objdump
+            STRIP=llvm-strip
+            CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu-
+            CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi-
+          )
+
+          make "${MAKE_ARGS[@]}" $KERNEL_DEFCONFIG
+
           if [[ $(echo "$(awk '/MemTotal/ {print $2}' /proc/meminfo) < 16000000" | bc -l) -eq 1 ]]; then
               scripts/config --file out/.config -d LTO -d LTO_CLANG -d THINLTO -e LTO_NONE
           fi
-          make O=out CC="ccache clang" CXX="ccache clang++" ARCH=arm64 -j`nproc` CROSS_COMPILE=$CLANG_PATH/bin/aarch64-linux-gnu- CROSS_COMPILE_ARM32=$CLANG_PATH/bin/arm-linux-gnueabi- LD=ld.lld 2>&1 | tee kernel.log
+
+          make "${MAKE_ARGS[@]}" -j"$(nproc)" 2>&1 | tee kernel.log
+
+          # Fail loudly if the kernel image was not produced
+          if [ ! -f out/arch/arm64/boot/Image ]; then
+            echo "::error::Build finished but out/arch/arm64/boot/Image is missing"
+            exit 1
+          fi
+          ls -lh out/arch/arm64/boot/Image
 
       - name: Create Anykernel3 file
         run: |
+          set -eo pipefail
           cd $GITHUB_WORKSPACE/kernel
           export KERNEL_PATH=$PWD
           git clone https://gitlab.com/inferno0230/AnyKernel3.git --depth=1 $KERNEL_PATH/AnyKernel3
-          if test -e $KERNEL_PATH/out/arch/arm64/boot/Image && test -d $KERNEL_PATH/AnyKernel3; then
-             zip_name="LineageOS23-KSUNext-martini-${{ env.TAG_NAME }}.zip"
-             cd $KERNEL_PATH/AnyKernel3
-             cp $KERNEL_PATH/out/arch/arm64/boot/Image $KERNEL_PATH/AnyKernel3
-             zip -r ${zip_name} *
-             mv ${zip_name} $KERNEL_PATH/out/arch/arm64/boot
-          fi
+
+          test -f $KERNEL_PATH/out/arch/arm64/boot/Image
+          zip_name="LineageOS23-KSUNext-martini-${{ env.TAG_NAME }}.zip"
+          cd $KERNEL_PATH/AnyKernel3
+          cp $KERNEL_PATH/out/arch/arm64/boot/Image $KERNEL_PATH/AnyKernel3
+          zip -r9 ${zip_name} * -x '.git*' README.md
+          mv ${zip_name} $KERNEL_PATH/out/arch/arm64/boot
+
+          # Verify the Image really is inside the zip
+          unzip -l $KERNEL_PATH/out/arch/arm64/boot/${zip_name} | grep -E ' Image$'
+
+      - name: Upload build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kernel-build-log
+          path: kernel/kernel.log
+          if-no-files-found: ignore
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -115,6 +166,7 @@ jobs:
           name: LineageOS23-KSUNext-martini-${{ env.TAG_NAME }}
           path: |
             kernel/AnyKernel3/*
+          if-no-files-found: error
 
       - name: Upload to Release
         if: github.event.inputs.RELEASE_CONFIG == 'true'
