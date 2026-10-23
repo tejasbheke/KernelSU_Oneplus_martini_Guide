@@ -86,21 +86,16 @@ jobs:
           # tiann/KernelSU's own setup.sh wires the driver into drivers/Makefile & Kconfig
           curl -LSs "https://raw.githubusercontent.com/tiann/KernelSU/main/kernel/setup.sh" | bash -s "${{ github.event.inputs.KERNELSU_TAG }}"
 
-      - name: Install python2 for dtbo build
+      - name: Point python2 at python3 for mkdtboimg.py
         run: |
           set -eo pipefail
-          if ! command -v python2 >/dev/null 2>&1; then
-            sudo apt-get update
-            if sudo apt-get install -y python2 2>/dev/null; then
-              echo "Installed python2 from default repos"
-            else
-              echo "python2 not in default repos, trying deadsnakes PPA"
-              sudo add-apt-repository -y ppa:deadsnakes/ppa
-              sudo apt-get update
-              sudo apt-get install -y python2.7
-              sudo ln -sf /usr/bin/python2.7 /usr/bin/python2
-            fi
-          fi
+          # mkdtboimg.py (invoked by the kernel's dtbo.img rule as `python2`)
+          # is actually python3-compatible (uses `from __future__ import
+          # print_function` and no py2-only syntax). Ubuntu 24.04 ships no
+          # python2 package at all (confirmed: apt and deadsnakes PPA both
+          # lack it), so rather than fight that, just make `python2` resolve
+          # to python3 for this one script.
+          sudo ln -sf "$(command -v python3)" /usr/local/bin/python2
           python2 --version
 
       - name: Make kernel
