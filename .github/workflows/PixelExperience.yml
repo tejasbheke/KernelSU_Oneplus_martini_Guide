@@ -89,12 +89,13 @@ jobs:
       - name: Point python2 at python3 for mkdtboimg.py
         run: |
           set -eo pipefail
-          # mkdtboimg.py (invoked by the kernel's dtbo.img rule as `python2`)
-          # is actually python3-compatible (uses `from __future__ import
-          # print_function` and no py2-only syntax). Ubuntu 24.04 ships no
-          # python2 package at all (confirmed: apt and deadsnakes PPA both
-          # lack it), so rather than fight that, just make `python2` resolve
-          # to python3 for this one script.
+          # The kernel's dtbo.img rule invokes `python2`, which Ubuntu 24.04
+          # ships nowhere (confirmed: default repos and deadsnakes PPA both
+          # lack it). mkdtboimg.py runs under python3 almost as-is, with one
+          # real exception: a single `xrange()` call (py2-only; py3 only has
+          # `range`). Patch that one line, then point `python2` at python3
+          # so the Makefile's hardcoded interpreter name resolves.
+          sed -i 's/\bxrange(/range(/g' $GITHUB_WORKSPACE/kernel/scripts/mkdtboimg.py
           sudo ln -sf "$(command -v python3)" /usr/local/bin/python2
           python2 --version
 
